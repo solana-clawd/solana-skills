@@ -432,3 +432,98 @@ Error: Cannot find module './litesvm.linux-x64-gnu.node'
    ```bash
    pnpm add -D litesvm-linux-x64-gnu
    ```
+
+---
+
+## Platform Tools Errors
+
+### `The Solana toolchain is corrupted` after fresh install
+```
+[ERROR cargo_build_sbf] The Solana toolchain is corrupted. Please, run cargo-build-sbf with the --force-tools-install argument to fix it.
+```
+
+**Root cause:** Solana CLI 2.2.x downloads platform-tools v1.48 (~516MB compressed, ~2GB extracted). On systems with limited root partition space (<3GB free in `~/.cache/solana/`), extraction can fail silently, leaving a corrupted toolchain (e.g., `rust/` directory missing `rustc` binary).
+
+**Verified on:** Debian 12, Solana CLI 2.2.16, root partition 9.7GB with 2.1GB free — Jan 2026
+
+**Solutions:**
+1. **Run with `--force-tools-install`:**
+   ```bash
+   cargo build-sbf --force-tools-install
+   ```
+   This re-downloads and re-extracts. Takes 5-10 minutes on average connections.
+
+2. **Ensure sufficient disk space** (~3GB free needed on partition containing `~/.cache/solana/`):
+   ```bash
+   df -h ~/.cache/solana/
+   # If too small, symlink to bigger disk:
+   rm -rf ~/.cache/solana/v1.48/platform-tools
+   mkdir -p /mnt/data/solana-cache/v1.48/platform-tools
+   ln -sf /mnt/data/solana-cache/v1.48/platform-tools ~/.cache/solana/v1.48/platform-tools
+   ```
+
+3. **Manual extraction** (if `--force-tools-install` keeps cycling):
+   ```bash
+   # Download manually
+   wget https://github.com/anza-xyz/platform-tools/releases/download/v1.48/platform-tools-linux-x86_64.tar.bz2
+   # Extract to a disk with space
+   mkdir -p /mnt/data/solana-platform-tools/v1.48
+   cd /mnt/data/solana-platform-tools/v1.48
+   tar xjf /path/to/platform-tools-linux-x86_64.tar.bz2
+   # Symlink
+   ln -sf /mnt/data/solana-platform-tools/v1.48 ~/.cache/solana/v1.48/platform-tools
+   ```
+
+**Note:** The `version.md` file is the last file extracted. Its presence confirms successful extraction.
+
+### Anchor CLI version mismatch warnings (non-fatal)
+```
+WARNING: `anchor-lang` version(0.32.1) and the current CLI version(0.30.1) don't match.
+WARNING: `@coral-xyz/anchor` version(^0.32.1) and the current CLI version(0.30.1) don't match.
+```
+
+**Root cause:** Using Anchor CLI 0.30.1 with `anchor-lang = "0.32.1"` in Cargo.toml. The build **succeeds** but prints warnings.
+
+**Verified on:** Debian 12, Anchor CLI 0.30.1 building anchor-lang 0.32.1 — builds and generates IDL correctly — Jan 2026
+
+**Impact:** Builds work. IDL generation works. But subtle runtime issues may occur with IDL format differences between 0.30 and 0.32.
+
+**Solutions:**
+1. **Match versions** (recommended):
+   ```toml
+   # Anchor.toml
+   [toolchain]
+   anchor_version = "0.32.1"
+   ```
+   Then install matching CLI: `avm install 0.32.1`
+2. **Or downgrade crate:** Change `anchor-lang = "0.30.1"` in Cargo.toml
+3. **Ignore if just building:** The mismatch is cosmetic for `anchor build` and `anchor idl build`
+
+---
+
+## Verified Test Results (Debian 12, Jan 2026)
+
+Environment: Rust 1.93, Solana CLI 2.2.16, Anchor CLI 0.30.1, Node 22.22.0, GLIBC 2.36
+
+| Test | Command | Result | Notes |
+|------|---------|--------|-------|
+| Anchor CLI/crate mismatch | `anchor build` (CLI 0.30.1 / anchor-lang 0.32.1) | ⚠️ PASS with warnings | Builds succeed; prints version mismatch warnings |
+| cargo build-sbf (native) | `cargo build-sbf` on hello-solana, counter, transfer-sol, create-account, checking-accounts | ✅ PASS | All build after platform-tools v1.48 installed correctly |
+| solana-bankrun (GLIBC 2.36) | `npm install solana-bankrun && require('solana-bankrun')` | ✅ PASS | `start` function available, works on GLIBC 2.36 |
+| litesvm npm (GLIBC 2.36) | `npm install litesvm && require('litesvm')` | ❌ FAIL | `undefined symbol: __isoc23_strtol` — requires GLIBC ≥2.38 |
+| @solana/web3.js CJS | `require('@solana/web3.js')` | ✅ PASS | Keypair, Connection etc. available |
+| @solana/web3.js ESM | `import * as web3 from '@solana/web3.js'` | ✅ PASS | Full ESM support on Node 22 |
+| @solana/kit (web3.js v2) ESM | `import('@solana/kit')` | ✅ PASS | ESM-only, works on Node 22 |
+| @coral-xyz/anchor CJS | `require('@coral-xyz/anchor')` | ✅ PASS | Program, Provider etc. available |
+| @coral-xyz/anchor ESM | `import * as anchor from '@coral-xyz/anchor'` | ✅ PASS | Full ESM support on Node 22 |
+| IDL generation | `anchor idl build` (from program dir) | ✅ PASS | Generates valid JSON IDL with CLI 0.30.1 |
+| Cargo duplicate deps | `cargo tree -d` on program-examples | ⚠️ INFO | 2295 lines of duplicate deps (ahash, base64, borsh, curve25519-dalek, ed25519-dalek, etc.) — normal for Solana workspace |
+| Platform tools corruption | `cargo build-sbf` on fresh install | ❌ FAIL then PASS | Initial corruption due to disk space; fixed with `--force-tools-install` on adequate disk |
+
+### Key Findings
+1. **litesvm 0.5.0 npm is BROKEN on Debian 12** (GLIBC 2.36) — use `solana-bankrun` as fallback
+2. **solana-bankrun works perfectly** on GLIBC 2.36 — recommended for Debian 12
+3. **Platform-tools v1.48 needs ~2GB disk** for extraction — symlink `~/.cache/solana/` to a larger partition if root is small
+4. **Anchor CLI 0.30.1 successfully builds anchor-lang 0.32.1** — warnings only, no errors
+5. **Node 22 has full ESM+CJS support** for all Solana JS packages tested
+6. **Cargo duplicate dependencies are normal** in Solana monorepos (borsh 0.9/0.10/1.x, curve25519-dalek 3.x/4.x, etc.)
