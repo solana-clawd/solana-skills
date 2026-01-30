@@ -5,8 +5,8 @@
 | Anchor Version | Release Date | Solana CLI | Rust Version | Platform Tools | GLIBC Req | Node.js | Key Notes |
 |---|---|---|---|---|---|---|---|
 | **0.32.x** | Oct 2025 | 2.1.x+ | 1.79–1.85+ (stable) | v1.50+ | ≥2.39 | ≥17 | Replaces `solana-program` with smaller crates; IDL builds on stable Rust; removes Solang |
-| **0.31.1** | Apr 2025 | 2.0.x–2.1.x | 1.79–1.83 | v1.47+ | ≥2.38 | ≥17 | New Docker image `solanafoundation/anchor`; published under solana-foundation org |
-| **0.31.0** | Mar 2025 | 2.0.x–2.1.x | 1.79–1.83 | v1.47+ | ≥2.38 | ≥17 | Solana v2 upgrade; dynamic discriminators; `LazyAccount`; `declare_program!` improvements |
+| **0.31.1** | Apr 2025 | 2.0.x–2.1.x | 1.79–1.83 | v1.47+ | ≥2.39 ⚠️ | ≥17 | New Docker image `solanafoundation/anchor`; published under solana-foundation org. **Tested: binary requires GLIBC 2.39, not 2.38** |
+| **0.31.0** | Mar 2025 | 2.0.x–2.1.x | 1.79–1.83 | v1.47+ | ≥2.39 ⚠️ | ≥17 | Solana v2 upgrade; dynamic discriminators; `LazyAccount`; `declare_program!` improvements. **Pre-built binary needs GLIBC 2.39** |
 | **0.30.1** | Jun 2024 | 1.18.x (rec: 1.18.8+) | 1.75–1.79 | v1.43 | ≥2.31 | ≥16 | `declare_program!` macro; legacy IDL conversion; `RUSTUP_TOOLCHAIN` override |
 | **0.30.0** | Apr 2024 | 1.18.x (rec: 1.18.8) | 1.75–1.79 | v1.43 | ≥2.31 | ≥16 | New IDL spec; token extensions; `cargo build-sbf` default; `idl-build` feature required |
 | **0.29.0** | Oct 2023 | 1.16.x–1.17.x | 1.68–1.75 | v1.37–v1.41 | ≥2.28 | ≥16 | Account reference changes; `idl build` compilation method; `.anchorversion` file |
@@ -48,9 +48,9 @@ As of Agave v3.0.0, Anza **no longer publishes the `agave-validator` binary**. O
 | OS / Distro | GLIBC Version | Compatible Anchor |
 |---|---|---|
 | **Ubuntu 24.04 (Noble)** | 2.39 | All (0.29–0.32+) |
-| **Ubuntu 22.04 (Jammy)** | 2.35 | 0.29–0.30.x only |
-| **Ubuntu 20.04 (Focal)** | 2.31 | 0.29–0.30.x only |
-| **Debian 12 (Bookworm)** | 2.36 | 0.29–0.30.x only |
+| **Ubuntu 22.04 (Jammy)** | 2.35 | 0.29–0.30.x only (build 0.31+ from source) |
+| **Ubuntu 20.04 (Focal)** | 2.31 | 0.29–0.30.x only (build 0.31+ from source) |
+| **Debian 12 (Bookworm)** | 2.36 | 0.29–0.30.x only ⚠️ **Tested: 0.31.1 and 0.32.1 pre-built binaries fail.** Build from source works for Anchor CLI, but `litesvm` 0.5.0 native binary also needs GLIBC 2.38+ |
 | **Debian 13 (Trixie)** | 2.40 | All |
 | **Fedora 39+** | ≥2.38 | All |
 | **Arch Linux (rolling)** | Latest | All |
@@ -161,4 +161,30 @@ Rust: 1.79.0
 Platform Tools: v1.47
 Node.js: 20.x LTS
 OS: Ubuntu 24.04 or macOS 14+
+```
+
+## Testing Tools: LiteSVM / Bankrun Compatibility
+
+| Tool | npm Package | GLIBC Req | Node.js | Notes |
+|---|---|---|---|---|
+| **LiteSVM 0.5.0** | `litesvm` | ≥2.38 ⚠️ | ≥18 | **Tested: native binary (`litesvm.linux-x64-gnu.node`) fails on Debian 12 (GLIBC 2.36) with `undefined symbol: __isoc23_strtol`**. Works on Ubuntu 24.04+, macOS. |
+| **LiteSVM 0.3.x** | `litesvm` | ≥2.31 | ≥16 | Older API, may work on older systems |
+| **solana-bankrun** | `solana-bankrun` | ≥2.28 | ≥16 | Legacy — being replaced by LiteSVM |
+| **anchor-bankrun** | `anchor-bankrun` | ≥2.28 | ≥16 | Legacy Anchor wrapper for bankrun |
+| **anchor-litesvm** | `anchor-litesvm` | Same as litesvm | ≥18 | Anchor wrapper for LiteSVM |
+
+### LiteSVM on Older Systems
+If `litesvm` 0.5.0 fails with GLIBC errors:
+1. **Upgrade OS** to Ubuntu 24.04+ (recommended)
+2. **Use Docker**: `FROM ubuntu:24.04` base image
+3. **Fall back to `solana-bankrun`** temporarily
+4. **Build litesvm from source** (requires Rust + napi-rs toolchain)
+
+### Verified Test Environment (Jan 2026)
+```
+✅ Works: Anchor CLI 0.30.1 (built from source) + Solana CLI 2.2.16 + Rust 1.93.0 + Debian 12
+❌ Fails: litesvm 0.5.0 native binary on Debian 12 (GLIBC 2.36)
+❌ Fails: Anchor 0.31.1/0.32.1 pre-built binaries on Debian 12 (GLIBC 2.36)
+✅ Works: cargo build-sbf (Solana 2.2.16, platform-tools v1.48) on Debian 12
+✅ Works: Anchor 0.30.1 built from source with Rust 1.93.0 on Debian 12
 ```

@@ -386,3 +386,49 @@ workspace/
 │   └── my_program/
 └── Anchor.toml
 ```
+
+---
+
+## LiteSVM Errors
+
+### `undefined symbol: __isoc23_strtol` (litesvm native binary)
+```
+Error: Cannot find native binding.
+cause: litesvm.linux-x64-gnu.node: undefined symbol: __isoc23_strtol
+```
+
+**Root cause:** LiteSVM 0.5.0 native binary is compiled against GLIBC 2.38+. The `__isoc23_strtol` symbol was introduced in GLIBC 2.38 (C23 standard functions). Systems with GLIBC < 2.38 (Ubuntu 22.04, Debian 12, etc.) cannot load this binary.
+
+**Verified on:** Debian 12 (GLIBC 2.36) — Jan 2026
+
+**Solutions:**
+1. **Upgrade OS** to Ubuntu 24.04+ or Debian 13+ (recommended)
+2. **Use Docker:**
+   ```dockerfile
+   FROM ubuntu:24.04
+   RUN apt-get update && apt-get install -y nodejs npm
+   ```
+3. **Fall back to `solana-bankrun`** if you can't upgrade:
+   ```bash
+   pnpm remove litesvm anchor-litesvm
+   pnpm add -D solana-bankrun anchor-bankrun
+   ```
+4. **Try litesvm 0.3.x** which may work on older GLIBC versions
+
+### `Cannot find module './litesvm.linux-x64-gnu.node'`
+```
+Error: Cannot find module './litesvm.linux-x64-gnu.node'
+```
+
+**Root cause:** pnpm hoisting doesn't always correctly link native optional dependencies for native Node addons.
+
+**Solutions:**
+1. Delete `node_modules` and reinstall: `rm -rf node_modules && pnpm install`
+2. Use `node-linker=hoisted` in `.npmrc`:
+   ```
+   node-linker=hoisted
+   ```
+3. Install the platform-specific package explicitly:
+   ```bash
+   pnpm add -D litesvm-linux-x64-gnu
+   ```
