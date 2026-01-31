@@ -28,20 +28,22 @@ As of Agave v3.0.0, Anza **no longer publishes the `agave-validator` binary**. O
 
 ## Platform Tools → Rust Toolchain Mapping
 
-| Platform Tools | Bundled Rust | LLVM/Clang | Notes |
-|---|---|---|---|
-| **v1.52** | ~1.85 (solana fork) | Clang 20 | Latest; used by Solana CLI 3.x |
-| **v1.51** | ~1.84 (solana fork) | Clang 19 | |
-| **v1.50** | ~1.83 (solana fork) | Clang 19 | |
-| **v1.49** | ~1.82 (solana fork) | Clang 18 | |
-| **v1.48** | ~1.81 (solana fork) | Clang 18 | |
-| **v1.47** | ~1.80 (solana fork) | Clang 17 | Used by Anchor 0.31.x |
-| **v1.46** | ~1.79 (solana fork) | Clang 17 | |
-| **v1.45** | ~1.79 (solana fork) | Clang 17 | |
-| **v1.44** | ~1.78 (solana fork) | Clang 16 | |
-| **v1.43** | ~1.75 (solana fork) | Clang 16 | Used by Anchor 0.30.x/Solana 1.18.x |
+| Platform Tools | Bundled Rust | Bundled Cargo | LLVM/Clang | Target Triple | Notes |
+|---|---|---|---|---|---|
+| **v1.52** | ~1.85 (solana fork) | ~1.85 | Clang 20 | `sbpf-solana-solana` | Latest; used by Solana CLI 3.x |
+| **v1.51** | ~1.84 (solana fork) | ~1.84 | Clang 19 | `sbpf-solana-solana` | |
+| **v1.50** | ~1.83 (solana fork) | ~1.83 | Clang 19 | `sbpf-solana-solana` | |
+| **v1.49** | ~1.82 (solana fork) | ~1.82 | Clang 18 | `sbpf-solana-solana` | |
+| **v1.48** | rustc 1.84.1-dev | cargo 1.84.0 | Clang 19 | `sbpf-solana-solana` | **Verified.** Used by Solana CLI 2.2.16. ⚠️ Cargo does NOT support `edition2024` |
+| **v1.47** | ~1.80 (solana fork) | ~1.80 | Clang 17 | `sbpf-solana-solana` | Used by Anchor 0.31.x |
+| **v1.46** | ~1.79 (solana fork) | ~1.79 | Clang 17 | `sbf-solana-solana` | |
+| **v1.45** | ~1.79 (solana fork) | ~1.79 | Clang 17 | `sbf-solana-solana` | |
+| **v1.44** | ~1.78 (solana fork) | ~1.78 | Clang 16 | `sbf-solana-solana` | |
+| **v1.43** | ~1.75 (solana fork) | ~1.75 | Clang 16 | `sbf-solana-solana` | Used by Anchor 0.30.x/Solana 1.18.x. ❌ Incompatible with CLI 2.2.16 (`sbpf-solana-solana` target not found) |
 
 **Note:** Platform Tools ship a **forked** Rust compiler from [anza-xyz/rust](https://github.com/anza-xyz/rust). The version numbers approximate the upstream Rust equivalent. The forked compiler includes SBF/SBPF target support.
+
+**⚠️ CRITICAL (Jan 2026):** Platform-tools v1.48 bundles `cargo 1.84.0` which does NOT support `edition = "2024"`. Multiple crates now require it: `blake3 ≥1.8.3`, `constant_time_eq ≥0.4.2`, `base64ct ≥1.8.3`, `indexmap ≥2.13.0`. Pin to safe versions: `blake3=1.8.2`, `constant_time_eq=0.3.1`, `base64ct=1.7.3`, `indexmap=2.11.4`. **Always commit Cargo.lock files.** See [common-errors.md](./common-errors.md#edition2024-crate-incompatibility-cargo-1840) for full details and fix scripts.
 
 ## GLIBC Requirements by OS
 

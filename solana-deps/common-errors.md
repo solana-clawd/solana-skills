@@ -501,6 +501,98 @@ WARNING: `@coral-xyz/anchor` version(^0.32.1) and the current CLI version(0.30.1
 
 ---
 
+## edition2024 Crate Incompatibility (Cargo 1.84.0)
+
+### `feature edition2024 is required` during `cargo build-sbf`
+```
+error: failed to download `constant_time_eq v0.4.2`
+
+Caused by:
+  failed to parse manifest at `.../constant_time_eq-0.4.2/Cargo.toml`
+
+Caused by:
+  feature `edition2024` is required
+
+  The package requires the Cargo feature called `edition2024`, but that feature is not
+  stabilized in this version of Cargo (1.84.0 (12fe57a9d 2025-04-07)).
+```
+
+**Root cause:** Platform-tools v1.48 (used by Solana CLI 2.2.16 and CI with Solana stable 3.0.14) bundles `cargo 1.84.0` (Solana Rust fork), which does **not** support `edition = "2024"`. Multiple crates in the Solana dependency tree have released versions requiring edition2024.
+
+### ⚠️ Known edition2024 Crates (Updated Jan 31, 2026)
+
+| Crate | Breaking Version | Safe Version | Pulled By |
+|---|---|---|---|
+| `blake3` | ≥1.8.3 | **1.8.2** | `solana-blake3-hasher` → `solana-program` |
+| `constant_time_eq` | ≥0.4.2 | **0.3.1** | `blake3` |
+| `base64ct` | ≥1.8.3 | **1.7.3** | `pkcs8`, `spki` → various crypto crates |
+| `indexmap` | ≥2.13.0 | **2.11.4** | `toml_edit` → `proc-macro-crate` → `borsh-derive` → `anchor-lang` |
+
+**New crates may ship edition2024 at any time.** If you see this error with a crate not listed above, pin it to the previous version.
+
+**Why existing repos break:** Projects without a `Cargo.lock` (or with a stale one) resolve to the latest crate versions at build time, pulling in edition2024-requiring releases. This is especially common in CI environments.
+
+**Verified on:**
+- Debian 12, Solana CLI 2.2.16, platform-tools v1.48 — Jan 30, 2026
+- GitHub Actions (ubuntu-latest), Solana stable 3.0.14, Cargo 1.84.0 — Jan 31, 2026
+
+### Solutions
+
+**1. Pin all known problematic crates (recommended for CI):**
+```bash
+cargo generate-lockfile
+cargo update -p blake3 --precise 1.8.2
+cargo update -p constant_time_eq --precise 0.3.1
+cargo update -p base64ct --precise 1.7.3
+cargo update -p indexmap --precise 2.11.4
+```
+
+**2. Pin via workspace Cargo.toml:**
+```toml
+# In workspace Cargo.toml
+[workspace.dependencies]
+blake3 = "=1.8.2"
+base64ct = "=1.7.3"
+```
+
+**3. Always commit Cargo.lock for programs and Anchor projects:**
+```bash
+# Force-add if .gitignore excludes it
+git add -f Cargo.lock
+```
+This is the single most effective prevention — a committed lockfile prevents cargo from resolving to newer breaking versions.
+
+**4. For monorepos with per-project Cargo.lock files (e.g., program-examples):**
+Each Anchor project that has its own `Cargo.toml` outside the workspace needs its own `Cargo.lock`. Generate and pin for each:
+```bash
+for dir in $(find . -path "*/anchor/Cargo.toml" -exec dirname {} \;); do
+  cd "$dir"
+  cargo generate-lockfile
+  cargo update -p blake3 --precise 1.8.2 2>/dev/null
+  cargo update -p constant_time_eq --precise 0.3.1 2>/dev/null
+  cargo update -p base64ct --precise 1.7.3 2>/dev/null
+  cargo update -p indexmap --precise 2.11.4 2>/dev/null
+  cd -
+done
+git add -f **/Cargo.lock
+```
+
+**5. Wait for platform-tools update** — a future platform-tools version will ship a cargo that supports edition2024. Track at [anza-xyz/platform-tools](https://github.com/anza-xyz/platform-tools/releases).
+
+### `Could not find specification for target "sbpf-solana-solana"` with `--tools-version`
+```
+error: Error loading target specification: Could not find specification for target "sbpf-solana-solana".
+Run `rustc --print target-list` for a list of built-in targets
+```
+
+**Root cause:** Using `cargo build-sbf --tools-version v1.43` with Solana CLI 2.2.16. The CLI generates `--target sbpf-solana-solana` but platform-tools v1.43 only knows older target triples (e.g., `sbf-solana-solana`). The SBPF target rename happened between v1.43 and v1.48.
+
+**Verified on:** Debian 12, Solana CLI 2.2.16 — Jan 30, 2026
+
+**Solution:** Don't downgrade platform-tools below your CLI's default version. Use the default tools version (v1.48 for CLI 2.2.16).
+
+---
+
 ## Verified Test Results (Debian 12, Jan 2026)
 
 Environment: Rust 1.93, Solana CLI 2.2.16, Anchor CLI 0.30.1, Node 22.22.0, GLIBC 2.36
